@@ -37,13 +37,27 @@ const entities = new Entities()
 
 const readFile = util.promisify(fs.readFile)
 
+/**
+ * Function to load the static data from a specified file.
+ * @param {string} file - Name of the file from which the static data needs to be loaded.
+ * @returns {Promise<string>} Returns a promise that resolves with the contents of the file as a string, or logs an error if the file could not be opened.
+ */
 function loadStaticData (file: string) {
   const filePath = path.resolve('./data/static/' + file + '.yml')
   return readFile(filePath, 'utf8')
     .then(safeLoad)
+    /**
+     * Logs error related to the unsuccessful opening of a file in the system
+     * @param {string} filePath - Represents the path of the file to be opened
+     * @returns {undefined} No return
+     */
     .catch(() => logger.error('Could not open file: "' + filePath + '"'))
 }
 
+/**
+ * The function exports all creator methods. These creator methods are used in creating different items i.e., SecurityQuestions, Users, Challenges, RandomFakeUsers, Products, Baskets, BasketItems, AnonymousFeedback, Complaints, RecycleItems, Orders, Quantity, Wallet, DeliveryMethods, and Memories. Each creator function is called iteratively in a sequential order.
+ * @returns {Promise} This asynchronous function does not explicitly return a value but it ensures all creation functions get executed in series.
+ */
 module.exports = async () => {
   const creators = [
     createSecurityQuestions,
@@ -68,6 +82,12 @@ module.exports = async () => {
   }
 }
 
+/**
+ * Asynchronous function to create challenges, applying configurations, and handle error.
+ * It loads static data for challenges, replaces sensitive data, and then inserts these challenges into the data cache.
+ * This function directly does not take any parameters but uses global variables like config, entities, logger, datacache.
+ * @returns {Promise<void>} Returns a Promise that resolves to undefined when all challenges have been successfully created.
+ */
 async function createChallenges () {
   const showHints = config.get('challenges.showHints')
   const showMitigations = config.get('challenges.showMitigations')
@@ -75,6 +95,13 @@ async function createChallenges () {
   const challenges = await loadStaticData('challenges')
 
   await Promise.all(
+    /**
+     * Maps through the challenges array and creates a new ChallengeModel instance for each challenge. 
+     * It also manipulates the description and hint of the challenge based on the application's configurations. 
+     * It also handles any errors that occur during the creation of the ChallengeModel instance.
+     * @param {Object} Challenge - An object representing a Challenge with properties name, category, description, difficulty, hint, hintUrl, mitigationUrl, key, disabledEnv, tutorial, tags.
+     * @returns {Promise} Returns a promise that resolves when all ChallengeModel instances have been created successfully, and rejects if an error occurs.
+     */
     challenges.map(async ({ name, category, description, difficulty, hint, hintUrl, mitigationUrl, key, disabledEnv, tutorial, tags }: Challenge) => {
       const effectiveDisabledEnv = utils.determineDisabledEnv(disabledEnv)
       description = description.replace('juice-sh.op', config.get('application.domain'))
@@ -104,10 +131,25 @@ async function createChallenges () {
   )
 }
 
+/**
+ * This function is used to create user entries asynchronously by loading static data for users.
+ * It further processes these loaded users and creates user entries in the database along with their associated fields if available.
+ * The associated fields can be security answer, feedback, address, or card. Also, checks for the deleted user flag.
+ * Error handling is also done in case of any errors while creating users.
+ * @returns {Promise<void>} Returns a promise which resolves when all the users have been processed, but doesn't return any value.
+ */
 async function createUsers () {
   const users = await loadStaticData('users')
 
   await Promise.all(
+    /**
+     * This asynchronous method takes in a map of user data and performs multiple operations on the data. 
+     * It creates a new user with the provided details, sets up security answers if provided and creates feedback, addresses, and cards if they're available too.
+     * If any error occurs during the operation, it logs the error with the corresponding user key.
+     * 
+     * @param {Object} User - An object encapsulating multiple properties of a user such as username, email, password, customDomain, key, role, deletedFlag, profileImage, securityQuestion, feedback, address, card, totpSecret, lastLoginIp.
+     * @returns {void} This method does not return anything. However, it populates the datacache.users object with the created user accounts keyed by user key.
+     */
     users.map(async ({ username, email, password, customDomain, key, role, deletedFlag, profileImage, securityQuestion, feedback, address, card, totpSecret, lastLoginIp = '' }: User) => {
       try {
         const completeEmail = customDomain ? email : `${email}@${config.get('application.domain')}`
@@ -134,13 +176,32 @@ async function createUsers () {
   )
 }
 
+/**
+ * Asynchronously creates new wallet objects for each user in the provided user data.
+ * Utilizes the 'WalletModel' to create and persist each new wallet, setting its 
+ * initial balance to the user's 'walletBalance' if provided, otherwise setting it to 0.
+ * 
+ * @returns {Promise<Array>} An array of Promises each resolving to the persisted WalletModel object for each user.
+ */
+
 async function createWallet () {
   const users = await loadStaticData('users')
   return await Promise.all(
+    /**
+     * Maps over the passed in array of users and asynchronously creates a new WalletModel instance for each user.
+     * @param {User} user - The current user object in the mapped array.
+     * @param {number} index - The current index in the mapped array.
+     * @returns {Promise} A promise which resolves when the WalletModel is successfully created or rejects when an error is caught.
+     */
     users.map(async (user: User, index: number) => {
       return await WalletModel.create({
         UserId: index + 1,
         balance: user.walletBalance !== undefined ? user.walletBalance : 0
+      /**
+       * This method is a part of promise chain, specifically designed to catch any errors that may occur during the promise execution.
+       * @param {unknown} err - Error object encapsulating details about the error that occurred in the promise execution.
+       * @returns {void} This function does not have a return value. Its sole purpose is to log the error messages to a logging framework.
+       */
       }).catch((err: unknown) => {
         logger.error(`Could not create wallet: ${utils.getErrorMessage(err)}`)
       })
@@ -148,10 +209,27 @@ async function createWallet () {
   )
 }
 
+/**
+ * This method acts to create delivery methods by loading a static data file named 'deliveries'.
+ * It asynchronously iterates through each delivery object in the file and creates a new model instance
+ * based on the properties of each object. If an error occurs during this process, it is logged for future troubleshooting.
+ * This function does not take any parameters nor does it return any outputs.
+ */
 async function createDeliveryMethods () {
   const deliveries = await loadStaticData('deliveries')
 
   await Promise.all(
+    /**
+     * Maps over an array of 'Delivery' objects, trying to create each one in the 'DeliveryModel'. 
+     * On error, it logs an error message with the error details.
+     * @param {Array<Object>} deliveries - Array of delivery details objects.
+     * @param {string} deliveries[].name - The name of the delivery method.
+     * @param {number} deliveries[].price - The price of the delivery method.
+     * @param {number} deliveries[].deluxePrice - The deluxe price of the delivery method.
+     * @param {number} deliveries[].eta - The estimated time of arrival for the delivery method.
+     * @param {string} deliveries[].icon - The icon representing the delivery method.
+     * @returns {Promise<void>} Does not return anything but creates each delivery method in the 'DeliveryModel'.
+     */
     deliveries.map(async ({ name, price, deluxePrice, eta, icon }: Delivery) => {
       try {
         await DeliveryModel.create({
@@ -168,7 +246,22 @@ async function createDeliveryMethods () {
   )
 }
 
+/**
+ * This function creates multiple addresses for a specific user
+ * @param {number}  UserId - The ID of the user for whom to create the addresses
+ * @param {Address[]}  addresses - An array of address objects that needs to be created for the user
+ * @returns {Promise[]} An array of Promises that represent the creation of addresses. Each Promise resolves to the created address record or rejects with an error message
+ */
 function createAddresses (UserId: number, addresses: Address[]) {
+  /**
+   * This method maps over an array of user addresses, and for each address, it creates a new entry in the AddressModel.
+   * The method asynchronously awaits the creation of new address in the AddressModel.
+   * In the case of an error during the creation of a new address, it logs the error message.
+   * @param {Array<Object>}  addresses - An array of address objects. Each address object contains the user's 
+   * Country, Full Name, Mobile Number, Zip Code, Street Address, City, and optionally, State.
+   * @returns {Promise<Array>} Returns a Promise that resolves to an array of Promises. Each promise 
+   * either resolves to the newly created document in the AddressModel or an undefined if there was an error during creation.
+   */
   addresses.map(async (address) => {
     return await AddressModel.create({
       UserId: UserId,
@@ -179,13 +272,36 @@ function createAddresses (UserId: number, addresses: Address[]) {
       streetAddress: address.streetAddress,
       city: address.city,
       state: address.state ? address.state : null
+    /**
+     * Handles errors while creating addresses.
+     * @param {unknown} err - Error thrown when creating addresses.
+     * @returns {void} Logs the error message using a logging service.
+     */
     }).catch((err: unknown) => {
       logger.error(`Could not create address: ${utils.getErrorMessage(err)}`)
     })
   })
 }
 
+/**
+ * This asynchronous function creates multiple card instances in the database for a specific user.
+ * @param {number}  UserId - The ID of the user for whom the cards are to be created.
+ * @param {Array}  cards - An array of Card objects that contains information about each card. Each Card object should have properties: fullName, cardNum, expMonth, expYear.
+ * @returns {Array} Returns a promise which resolves into an array of promises, each one representing an attempt to create a card instance in the database. If a card creation fails, an error log is generated.
+ */
+
 async function createCards (UserId: number, cards: Card[]) {
+  /**
+   * This method creates card records for a particular user in the database using async/Promise.all. 
+   * For each card in the input array, a new card document is created which contains user ID, card full name, card number, expiry month and year.
+   * If there is an error during the creation of the card, an error message is logged.
+   * 
+   * @param {Array<Object>} cards - An array of card objects. Each card object contains the fullName, cardNumber, expMonth, expYear as attributes.
+   * @param {number} UserId - Unique Identifier of the user to whom the card belongs.
+   * 
+   * @returns {Promise<Array>} Returns a promise that resolves to an array of promises. Each promise represents the outcome of the CardModel.create card creation operation for each card.
+   */
+  
   return await Promise.all(cards.map(async (card) => {
     return await CardModel.create({
       UserId: UserId,
@@ -193,30 +309,77 @@ async function createCards (UserId: number, cards: Card[]) {
       cardNum: Number(card.cardNum),
       expMonth: card.expMonth,
       expYear: card.expYear
+    /**
+     * Error handling function for failed card creation.
+     * @param {unknown}  err - The error returned from attempted card creation.
+     */
     }).catch((err: unknown) => {
       logger.error(`Could not create card: ${utils.getErrorMessage(err)}`)
     })
   }))
 }
 
+/**
+ * This function performs the action to delete a user from the UserModel. In case of error, it catches the exception and logs the error message.
+ * @param {number}  userId - A unique identifier for the user to be deleted.
+ * @returns {Promise} Returns a Promise that resolves if user is successfully deleted or rejects with an error message if an issue occurred.
+ */
 async function deleteUser (userId: number) {
+  /**
+   * Destroys a user record from the UserModel.
+   * @param {number} userId - The id of the user to delete.
+   * @returns {Promise} Promise object represents the result of the deletion operation. Logs error if unsuccessful.
+   */
   return await UserModel.destroy({ where: { id: userId } }).catch((err: unknown) => {
     logger.error(`Could not perform soft delete for the user ${userId}: ${utils.getErrorMessage(err)}`)
   })
 }
 
+/**
+ * A function to delete a specific product from the ProductModel database.
+ * @param {number} productId - The ID of the product that is to be deleted.
+ * @returns {Promise} Promise represents the completion of an asynchronous operation to delete a product. Returns an error message if the operation fails.
+ */
 async function deleteProduct (productId: number) {
+  /**
+   * Deletes a product record from the database identified by the productId. It is a soft delete operation - the data is marked as deleted but not actually removed.
+   * @param {number}  productId - Identifier of the product to be deleted.
+   * @returns {Promise<number>} The number of affected rows for the delete operation.
+   * @throws Will throw an error message logged using logger if any error occurs during the operation.
+   */
+  
   return await ProductModel.destroy({ where: { id: productId } }).catch((err: unknown) => {
     logger.error(`Could not perform soft delete for the product ${productId}: ${utils.getErrorMessage(err)}`)
   })
 }
 
+/**
+ * Asynchronous function to create a set of randomly generated fake users.
+ * Internally, it generates random fake emails and passwords for each user.
+ * This function uses 'UserModel' to create each user.
+ *
+ * NOTE: This function uses the 'config' value 'application.numberOfRandomFakeUsers' 
+ * to determine the number of fake users to create. Ensure you have properly set this configuration value.
+ * 
+ * @returns {Promise<Array>} An array of promises, each resolving to a newly created random fake user. 
+ * Use "Promise.all()" to ensure all users have been created.
+ */
 async function createRandomFakeUsers () {
+  /**
+   * Generates a random fake user email. A user email is generated with a random username and a random domain.
+   * No parameters are needed for this function and it returns a string.
+   * @returns {string} Randomly generated fake user email.
+   */
   function getGeneratedRandomFakeUserEmail () {
     const randomDomain = makeRandomString(4).toLowerCase() + '.' + makeRandomString(2).toLowerCase()
     return makeRandomString(5).toLowerCase() + '@' + randomDomain
   }
 
+  /**
+   * Generates a random alphanumeric string of a given length.
+   * @param {number} length - Length of the random string to be generated.
+   * @returns {string} A random alphanumeric string of the given length.
+   */
   function makeRandomString (length: number) {
     let text = ''
     const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
@@ -227,6 +390,10 @@ async function createRandomFakeUsers () {
   }
 
   return await Promise.all(new Array(config.get('application.numberOfRandomFakeUsers')).fill(0).map(
+    /**
+     * Asynchronously creates a new user in the User database model with a randomly generated email and password.
+     * @returns {Promise<Object>} Returns a Promise that resolves to the newly created user object.
+     */
     async () => await UserModel.create({
       email: getGeneratedRandomFakeUserEmail(),
       password: makeRandomString(5)
@@ -234,6 +401,11 @@ async function createRandomFakeUsers () {
   ))
 }
 
+/**
+ * An asynchronous function that creates quantities for each product in the product configuration. Uses the 'products' object from the config module. For each product, a new Quantity is created and stored in the database. If the quantity of the product is defined, it is used, otherwise a random quantity is used. If there is a limit per user for the product, it is used, otherwise null is used.
+ * @param {None} No parameters required.
+ * @returns {Promise<Array>} Returns a Promise that resolves to an array of Quantities created.
+ */
 async function createQuantity () {
   return await Promise.all(
     config.get<Product[]>('products').map(async (product: Product, index: number) => {
