@@ -125,6 +125,11 @@ const startupGauge = new client.Gauge({
 
 // Wraps the function and measures its (async) execution time
 const collectDurationPromise = (name: string, func: Function) => {
+  /**
+   * An asynchronous function that starts a timer, executes a function, stops the timer, and returns the function's result.
+   * @param {any[]}  args - The arguments to be passed onto the function `func`.
+   * @returns {Promise} Returns the response of the executed function `func`.
+   */
   return async (...args: any) => {
     const end = startupGauge.startTimer({ task: name })
     const res = await func(...args)
@@ -194,6 +199,13 @@ restoreOverwrittenFilesWithOriginals().then(() => {
     contact: config.get('application.securityTxt.contact'),
     encryption: config.get('application.securityTxt.encryption'),
     acknowledgements: config.get('application.securityTxt.acknowledgements'),
+    /**
+     * Extracts the first two letters (representing languages) from an array of locale objects, eliminates any duplicates, 
+     * and joins them into a single, comma-separated string value.
+     * 
+     * @param {Array} locales - An array of locale objects, each of which has a property named 'key' that includes a language code.
+     * @returns {String} Returns a string of unique, 2-letter language codes separated by commas.
+     */
     'Preferred-Languages': [...new Set(locales.map((locale: { key: string }) => locale.key.substr(0, 2)))].join(', '),
     hiring: config.get('application.securityTxt.hiring'),
     expires: securityTxtExpiration.toUTCString()
@@ -219,6 +231,14 @@ restoreOverwrittenFilesWithOriginals().then(() => {
       if (arguments.length) {
         const reqPath = req.originalUrl.replace(/\?.*$/, '')
         const currentFolder = reqPath.split('/').pop() as string
+        /**
+         * This method modifies HTML anchor tags in a string by altering the href attribute to represent the relative path 
+           of the provided URL, based upon the current path request.
+         *
+         * @param {string} arguments[0] - The string that contains HTML to have its anchor tags href attributes altered.
+         *
+         * @returns {string} The input string, but with hrefs altered to be relative paths.
+         */
         arguments[0] = arguments[0].replace(/a href="([^"]+?)"/gi, function (matchString: string, matchedUrl: string) {
           let relativePath = path.relative(reqPath, matchedUrl)
           if (relativePath === '') {
@@ -261,6 +281,11 @@ restoreOverwrittenFilesWithOriginals().then(() => {
 
   /* Configure and enable backend-side i18n */
   i18n.configure({
+    /**
+     * Method maps through given locales and returns the keys.
+     * @param {array}  locales - An array of locale objects, each object should have a 'key' property of type string. 
+     * @returns {array} Array of keys from the passed locale objects.
+     */
     locales: locales.map((locale: { key: string }) => locale.key),
     directory: path.resolve('i18n'),
     cookie: 'language',
@@ -277,6 +302,16 @@ restoreOverwrittenFilesWithOriginals().then(() => {
   app.post('/rest/memories', uploadToDisk.single('image'), ensureFileIsPassed, security.appendUserId(), metrics.observeFileUploadMetricsMiddleware(), memory.addMemory())
 
   app.use(bodyParser.text({ type: '*/*' }))
+  /**
+   * Express middleware for parsing JSON bodies from requests. The original JSON body is preserved in request's rawBody property. 
+   * If the request's headers include 'application/json' and body exists, it is parsed and replaced.  
+   * If the body content is not a JSON, it's tried to be parsed into a JSON.
+   * 
+   * @param {Request} req - The request object
+   * @param {Response} res - The response object
+   * @param {NextFunction} next - The next middleware function to call
+   * @returns {void} Middleware does not return anything
+   */
   app.use(function jsonParser (req: Request, res: Response, next: NextFunction) {
     // @ts-expect-error
     req.rawBody = req.body
@@ -474,6 +509,17 @@ restoreOverwrittenFilesWithOriginals().then(() => {
 
     // translate challenge descriptions and hints on-the-fly
     if (name === 'Challenge') {
+      /**
+       * This method executes after the fetch operation on the resource list. It iterates over 
+       * the instances in the context, translates the "description" and "hint" properties 
+       * of each instance if they exist.
+       * The method dimensions any warning present in the description text.
+       * @param {Request} req - The request object from the client.
+       * @param {Response} res - The response object to be sent to the client.
+       * @param {Object} context - An object that holds multiple properties including an 
+       * instance, which could be a string or an array and a continue method.
+       * @returns {Function} It returns the continue method from the context.
+       */
       resource.list.fetch.after((req: Request, res: Response, context: { instance: string | any[], continue: any }) => {
         for (let i = 0; i < context.instance.length; i++) {
           let description = context.instance[i].description
@@ -490,6 +536,20 @@ restoreOverwrittenFilesWithOriginals().then(() => {
         }
         return context.continue
       })
+      /**
+       * A middleware function for pre-process data before sending a read request.
+       * It translates the description and hint properties based on the user's locale.
+       *
+       * @param {Request}  req - The Express request object.
+       * @param {Response} res - The Express response object.
+       * @param {Object} context - context object contains instance (with 'description' and 'hint' properties) and 'continue' function.
+       * @param {Object} context.instance - The instance containing the description and hint to be processed.
+       * @param {string} context.instance.description - The description to be processed.
+       * @param {string} context.instance.hint - The hint to be processed. This is optional.
+       * @param {Function} context.continue - The next function to be called.
+       *
+       * @returns {Function} The modified 'continue' function.
+       */
       resource.read.send.before((req: Request, res: Response, context: { instance: { description: string, hint: string }, continue: any }) => {
         context.instance.description = req.__(context.instance.description)
         if (context.instance.hint) {
@@ -501,12 +561,27 @@ restoreOverwrittenFilesWithOriginals().then(() => {
 
     // translate security questions on-the-fly
     if (name === 'SecurityQuestion') {
+      /**
+       * Fetch method for the resource list which runs after the base operation. 
+       * It iterates over the items in the context instance and modifies each item by setting the value of 'question' key.
+       * @param {Object}  req - Request object.
+       * @param {Object}  res - Response object.
+       * @param {Object}  context - Context object with 'instance' key which could be a string or an array, and 'continue' key which is a callback function.
+       * @returns {Function} Returns the 'continue' callback function from the context object.
+       */
       resource.list.fetch.after((req: Request, res: Response, context: { instance: string | any[], continue: any }) => {
         for (let i = 0; i < context.instance.length; i++) {
           context.instance[i].question = req.__(context.instance[i].question)
         }
         return context.continue
       })
+      /**
+       * Middleware function to manipulate the question string in the instance context before executing a GET request.
+       * @param {Request} req - The HTTP request object.
+       * @param {Response} res - The HTTP response object.
+       * @param {Object} context - The context object of the current instance, it contains the instance itself and the continue function. The instance has a question property.
+       * @returns {Function} The unchanged continue function from the context object.
+       */
       resource.read.send.before((req: Request, res: Response, context: { instance: { question: string }, continue: any }) => {
         context.instance.question = req.__(context.instance.question)
         return context.continue
@@ -515,6 +590,13 @@ restoreOverwrittenFilesWithOriginals().then(() => {
 
     // translate product names and descriptions on-the-fly
     if (name === 'Product') {
+      /**
+       * This method is a post-processing operation for the list.fetch API call. It loops over the returned data instances and modifies the name and description of each instance based on a provided request function.
+       * @param {Object} req - The request object, containing functions to modify the name and description of a data instance.
+       * @param {Object} res - The response object.
+       * @param {Object} context - The context object, which contains the instances returned by list.fetch API call and the continue method.
+       * @returns {Function} The 'continue' method that can be chained with other operations.
+       */
       resource.list.fetch.after((req: Request, res: Response, context: { instance: any[], continue: any }) => {
         for (let i = 0; i < context.instance.length; i++) {
           context.instance[i].name = req.__(context.instance[i].name)
@@ -522,6 +604,15 @@ restoreOverwrittenFilesWithOriginals().then(() => {
         }
         return context.continue
       })
+      /**
+       * This middleware function intercepts a "read" request before it is executed, alters the request instance with localized values extracted from the request object, and then proceeds with the execution.
+       * @param {Request} req - The Express Request Object.
+       * @param {Response} res - The Express Response Object.
+       * @param {Object} context - Contains the "instance" object to be modified and the "continue" function to proceed with the request execution.
+       * @param {Object} context.instance - The instance to be modified; it should have at least the "name" and "description" properties.
+       * @param {Function} context.continue - The function to be called to proceed with the execution of the incoming request.
+       * @returns {Function} The proceed function to continue execution.
+       */
       resource.read.send.before((req: Request, res: Response, context: { instance: { name: string, description: string }, continue: any }) => {
         context.instance.name = req.__(context.instance.name)
         context.instance.description = req.__(context.instance.description)
@@ -618,6 +709,11 @@ restoreOverwrittenFilesWithOriginals().then(() => {
   /* Error Handling */
   app.use(verify.errorHandlingChallenge())
   app.use(errorhandler())
+/**
+ * Handle promise errors
+ * @param {Error} err - An error object describing what went wrong
+ */
+
 }).catch((err) => {
   console.error(err)
 })
@@ -631,6 +727,13 @@ const mimeTypeMap: any = {
 }
 const uploadToDisk = multer({
   storage: multer.diskStorage({
+    /**
+     * This method defines the destination path for uploaded file. It also validates the mime type of the uploaded file.
+     * @param {Request} req - The incoming request object.
+     * @param {any} file - The file that needs to be uploaded.
+     * @param {Function} cb - The callback function to be invoked after validating mime type and defining destination path.
+     * @returns {void} This method does not have a return value but it calls the callback function with error (if any) and destination path as arguments.
+     */
     destination: (req: Request, file: any, cb: Function) => {
       const isValid = mimeTypeMap[file.mimetype]
       let error: Error | null = new Error('Invalid mime type')
@@ -639,6 +742,13 @@ const uploadToDisk = multer({
       }
       cb(error, path.resolve('frontend/dist/frontend/assets/public/images/uploads/'))
     },
+    /**
+     * Method to sanitise and standardise the file name while uploading. It converts the filename to lowercase, replaces spaces with dashes, appends current timestamp and adds correct extension based on mimetype.
+     * @param {Request} req - The express Request object.
+     * @param {any} file - Object containing information and data of the file to be uploaded.
+     * @param {Function} cb - Callback function to execute after file name is generated and sanitised.
+     * @returns {void} This method does not have a return. The result is sent through the callback function.
+     */
     filename: (req: Request, file: any, cb: Function) => {
       const name = security.sanitizeFilename(file.originalname)
         .toLowerCase()
@@ -651,6 +761,12 @@ const uploadToDisk = multer({
 })
 
 const expectedModels = ['Address', 'Basket', 'BasketItem', 'Captcha', 'Card', 'Challenge', 'Complaint', 'Delivery', 'Feedback', 'ImageCaptcha', 'Memory', 'PrivacyRequestModel', 'Product', 'Quantity', 'Recycle', 'SecurityAnswer', 'SecurityQuestion', 'User', 'Wallet']
+/**
+ * This snippet continuously checks that all expected models exist within Sequelize's list of defined models.
+ * @param {Array} expectedModels - An array of models that are expected to be defined.
+ * @param {Object} sequelize.models - An object representing all models defined in sequelize.
+ */
+
 while (!expectedModels.every(model => Object.keys(sequelize.models).includes(model))) {
   logger.info(`Entity models ${colors.bold(Object.keys(sequelize.models).length.toString())} of ${colors.bold(expectedModels.length.toString())} are initialized (${colors.yellow('WAITING')})`)
 }
@@ -667,6 +783,11 @@ errorhandler.title = `${config.get('application.name')} (Express ${utils.version
 const registerWebsocketEvents = require('./lib/startup/registerWebsocketEvents')
 const customizeApplication = require('./lib/startup/customizeApplication')
 
+/**
+ * Initiates the server and sets up the environment including the database and server port.
+ * It also manages the metrics update loop and register websocket events.
+ * @param {Function} readyCallback - A callback function to be executed when the setup is ready.
+ */
 export async function start (readyCallback: Function) {
   const datacreatorEnd = startupGauge.startTimer({ task: 'datacreator' })
   await sequelize.sync({ force: true })
@@ -677,6 +798,13 @@ export async function start (readyCallback: Function) {
 
   metricsUpdateLoop = Metrics.updateLoop() // vuln-code-snippet neutral-line exposedMetricsChallenge
 
+  /**
+   * This method starts a server listening on a specified port and registers websocket events. 
+   * It also sets a gauge to monitor startup time and logs the server status and base path if any.
+   * @param {number} port - The port number on which the server is to listen.
+   * @param {function} readyCallback - The callback function to be invoked once the server is ready.
+   * @returns {void} This function does not return anything
+   */
   server.listen(port, () => {
     logger.info(colors.cyan(`Server listening on port ${colors.bold(`${port}`)}`))
     startupGauge.set({ task: 'ready' }, (Date.now() - startTime) / 1000)
@@ -693,6 +821,10 @@ export async function start (readyCallback: Function) {
   void collectDurationPromise('customizeEasterEgg', customizeEasterEgg)() // vuln-code-snippet hide-line
 }
 
+/**
+ * The function closes the server and terminates the process with a specified exit code if one is provided.
+ * @param {number | undefined} exitCode - An optional exit code. If specified, the process exits with the provided code.
+ */
 export function close (exitCode: number | undefined) {
   if (server) {
     clearInterval(metricsUpdateLoop)
@@ -706,4 +838,8 @@ export function close (exitCode: number | undefined) {
 
 // stop server on sigint or sigterm signals
 process.on('SIGINT', () => close(0))
+/**
+ * Listens for a termination signal (SIGTERM) and calls the close function with 0 as parameter when it occurs.
+ * This method is especially useful for graceful shutdown in applications.
+ */
 process.on('SIGTERM', () => close(0))
