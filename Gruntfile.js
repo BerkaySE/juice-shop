@@ -5,6 +5,15 @@
 
 'use strict'
 
+/**
+ * Provides grunt tasks for building a package. It configures tasks to replace json, compress files,
+ * and generate md5 checksum for contents of 'dist/' directory. It exposes a grunt task 'package' 
+ * which runs these tasks sequentially.
+ *
+ * @param {object} grunt - the grunt object instance, usually provided by grunt at runtime.
+ *
+ * @returns {undefined} Has no explicit return value, alters grunt's runtime configuration and registers new tasks on it.
+ */
 module.exports = function (grunt) {
   const os = grunt.option('os') || process.env.PCKG_OS_NAME || ''
   const platform = grunt.option('platform') || process.env.PCKG_CPU_ARCH || ''
@@ -65,9 +74,19 @@ module.exports = function (grunt) {
     }
   })
 
+  /**
+   * Method to create '.md5' checksum files for each file in the 'dist/' directory.  
+   * This task requires both 'fs' and 'crypto' Node.js modules.
+   * @returns {undefined}
+   */
   grunt.registerTask('checksum', 'Create .md5 checksum files', function () {
     const fs = require('fs')
     const crypto = require('crypto')
+    /**
+     * Iterates through the files in the `dist/` directory, generates their MD5 hash, and writes that hash to a new file in the same directory.
+     * @param {string} file - The name of the file being processed.
+     * @returns {void} No return value.
+     */
     fs.readdirSync('dist/').forEach(file => {
       const buffer = fs.readFileSync('dist/' + file)
       const md5 = crypto.createHash('md5')
